@@ -104,8 +104,6 @@ class Tnet(nn.Module):
                 SharedLinear(128, 1024)
                 )
 
-        self.maxpool = nn.MaxPool1d(kernel_size=n_points)
-
         self.fc1 = nn.Linear(1024, 512, bias=False)
         self.b1 = nn.BatchNorm1d(512)
         self.relu1 = nn.ReLU(inplace=True)
@@ -117,10 +115,9 @@ class Tnet(nn.Module):
         self.lm_head = nn.Linear(256, dim*dim)  # transformation matrix
 
     def forward(self, x: torch.Tensor):
-        B, N, C = x.size()
         x = x.transpose(2, 1)  # B, C, N
         x = self.features(x)
-        x = self.maxpool(x)
+        x = torch.max(x, 2, keepdim=True)[0]  # this inseatd of nn.Maxpool (2x faster)
 
         x = x.view(-1, 1024)
         x = self.relu1(self.b1(self.fc1(x)))
@@ -129,7 +126,7 @@ class Tnet(nn.Module):
         x = self.lm_head(x)
 
         iden = torch.eye(self.dim, requires_grad=True).repeat(B, 1, 1)
-        if x.is_cuda:
+        if x.is_cuda:  # FIX
             iden = iden.cuda()
         x = x.view(-1, self.dim, self.dim) + iden
         return x
@@ -172,9 +169,10 @@ class Pointnet(nn.Module):
         x = torch.bmm(x.transpose(2, 1), feat_tr).transpose(2, 1)
         x = self.shared_mlp2(x)
 
-        x = self.maxpool(x).view(-1, 1024)
-        x = F.relu(self.bn1(self.fc1(x)))
-        x = F.relu(self.bn2(self.dropout(self.fc2(x))))
+        x = torch.max(x, 2, keepdim=True)[0]
+        x = x.view(-1, 1024)
+        x = self.relu1(self.bn1(self.fc1(x)))
+        x = self.relu2(self.bn2(self.dropout(self.fc2(x))))
         logits = self.lm_head(x)
 
         return logits, feat_tr
