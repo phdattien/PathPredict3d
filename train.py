@@ -3,6 +3,7 @@ import torch.nn as nn
 
 # download the modelnet10 dataset
 import os
+import time
 import pickle
 # import open3d as o3d
 import trimesh
@@ -154,10 +155,13 @@ class Pointnet(nn.Module):
         self.maxpool = nn.MaxPool1d(kernel_size=1024)
         self.fc1 = nn.Linear(1024, 512, bias=False)
         self.bn1 = nn.BatchNorm1d(512)
+        self.relu1 = nn.ReLU(inplace=True)
 
         self.fc2 = nn.Linear(512, 256, bias=False)
         self.dropout = nn.Dropout(p=0.3)
         self.bn2 = nn.BatchNorm1d(256)
+        self.relu2 = nn.ReLU(inplace=True)
+
         self.lm_head = nn.Linear(256, k)
 
     def forward(self, x):
@@ -178,14 +182,9 @@ class Pointnet(nn.Module):
         return logits, feat_tr
 
 
-def inplace_relu(m):
-    classname = m.__class__.__name__
-    if classname.find('ReLU') != -1:
-        m.inplace = True
-
-
-B = 4
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+B = 32
+EPOCH = 3
+device = 'cuda'
 
 
 def main():
@@ -193,28 +192,33 @@ def main():
     torch.manual_seed(13337)
 
     train_dataset = ModelNet10Loader(split='train')
-    trainDataLoader = DataLoader(train_dataset, batch_size=B, shuffle=True)
+    trainDataLoader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=B, shuffle=True, drop_last=True)
 
     model = Pointnet(1024, 10)
-    model.apply(inplace_relu)
-    # print(model)
-    # return
-    # model.compile()
-    # model.to(device)
-    model.train()
+    model.to(device)
+    model = torch.compile(model)
+
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
-    for points, labels in trainDataLoader:
-        for i in range(50):
+    print(f"One epoch has {len(trainDataLoader)} batches")
+    model.train()
+    t0 = time.time()
+
+    for i in range(EPOCH):
+        for j, (points, labels) in enumerate(trainDataLoader):
             optimizer.zero_grad()
-            # points = points.to(device)
-            # labels = labels.to(device)
+            points = points.to(device)
+            labels = labels.to(device)
             logits, tranform = model(points)
             loss = F.cross_entropy(logits, labels)
             loss.backward()
             optimizer.step()
-            print(f"iter: {i} loss: {loss}")
-        break
+
+            t1 = time.time()
+            dt = t1 - t0
+            t0 = t1
+            print(f"iter {j}: loss {loss:4f}, time {dt*1000:.2f}ms")
 
     # --------------- visualisation ---------------
     # train_features, train_labels = next(iter(trainDataLoader))
