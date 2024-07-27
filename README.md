@@ -1,1 +1,3 @@
-Implementing paintNet in pytroch, and to be able to predict trajectories of robot end effector
+# PathPredict3d
+
+repository, implementing point cloud classification models, for predicting 3D trajectories for robot spray painting.
