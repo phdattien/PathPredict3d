@@ -1,7 +1,8 @@
+# inspiration from nanoGPT and https://github.com/yanx27/Pointnet_Pointnet2_pytorch/blob/master/train_classification.py
 import torch
 import sys
 
-# download the modelnet10 dataset
+import provider
 import time
 # import open3d as o3d
 import torch.nn.functional as F
@@ -11,19 +12,6 @@ from models.pointnet import Pointnet, PointNetConfig
 from data.modelnet10.ModelNetData import ModelNet10Loader
 
 from pathlib import Path
-# import h5py
-
-
-
-
-# def visualize_pcd(xyz: np.ndarray):
-#     pcd = o3d.geometry.PointCloud()
-#     pcd.points = o3d.utility.Vector3dVector(xyz)
-#     o3d.visualization.draw_geometries([pcd])
-
-
-
-
 
 
 def get_lr(it: int):
@@ -85,15 +73,15 @@ DATA = 'ModelNet10'  # which dataset using
 NUM_CATEGORY = 10
 DROPOUT = 0.3
 
-MODEL_NAME = 'pointNet_1024_model_net10'
+MODEL_NAME = 'pointnet_augment'  # name the model, will be placed in out dir
 RESUME = False  # keep training same model
 
 # wandb logging
-wandb_log = False
+wandb_log = True  # wheter we want keep logging
 wandb_project = 'pointcls'
-wandb_run_name = 'pointNet'
+wandb_run_name = 'pointNet_augment'
+wandb_resume = 'allow'  # in case we fail a run find ID of the run and resume
 # wandb_id = 'pointnet3'
-wandb_resume = 'allow'
 
 # training config
 device = 'cuda'
@@ -102,6 +90,7 @@ config_keys = [k for k,v in globals().items() if not k.startswith('_') and isins
 config = {k: globals()[k] for k in config_keys}  # will be useful for logging
 
 
+# all models will be save in out file
 OUT_DIR = Path(__file__).resolve().parent / 'out'
 if not OUT_DIR.exists():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -129,7 +118,6 @@ if RESUME:
         model.load_state_dict(state_dict)
         ITER_NUM = ckpt['iter_num']
         BEST_VAL_ACC = ckpt['best_val_acc']
-        print(BEST_VAL_ACC)
         print("Succes of resuming model")
 
     except Exception as e:
@@ -139,7 +127,6 @@ model.to(device)
 
 param_count = sum(p.numel() for p in model.parameters() if p.requires_grad)
 print(f"Total parameters: {param_count}")
-sys.exit(0)
 
 
 # ================== LOGGING wandb =================================
@@ -168,7 +155,7 @@ if RESUME:
 
 # ============================TRAINING LOOP====================================
 if RESUME:
-    print(f"Start training from epoch: {ITER_NUM}")
+    print(f"Start training from epoch: {ITER_NUM} with best acc: {BEST_VAL_ACC}")
 else:
     print("Start training from scratch")
 
@@ -186,6 +173,12 @@ while True:
 
     for j, (points, labels) in enumerate(trainDataLoader):
         optimizer.zero_grad()
+
+        points = points.data.numpy()
+        points = provider.rotate_point_cloud(points)
+        points = provider.jitter_point_cloud(points)
+        points = torch.Tensor(points)
+
         points = points.to(device)
         labels = labels.to(device)
 
@@ -197,17 +190,16 @@ while True:
 
         loss.backward()
         optimizer.step()
-        torch.cuda.synchronize()
-        # print(f"epoch {i}: loss {batch_loss:4f}, acc {batch_acc}, time {dt*1000:.2f}ms, points/sec {B*1024/dt}")
-
-    t1 = time.time()
-    dt = t1 - t0
-    t0 = t1
 
     # evaluate | logging | saving check points
     train_loss = running_loss / len(trainDataLoader)
     train_acc = running_acc / len(trainDataLoader)
     val_loss, val_acc = estimate_loss(model, valDataLoader)
+
+    torch.cuda.synchronize()
+    t1 = time.time()
+    dt = t1 - t0
+    t0 = t1
 
     print(f"epoch {ITER_NUM}: train loss {train_loss:4f}, train acc {train_acc:4f}, val loss {val_loss:4f}, val acc {val_acc:4f} time {dt*1000:.2f}ms")
 
@@ -236,14 +228,3 @@ while True:
 
     if ITER_NUM > MAX_ITER:
         break
-
-    # end of epoch, do evaluation
-
-# --------------- visualisation ---------------
-# train_features, train_labels = next(iter(trainDataLoader))
-# print(f"Feature batch shape: {train_features.size()}")
-# print(f"Labels batch shape: {train_labels.size()}")
-# points = train_features[-1]
-# label = train_labels[0]
-# print(f"Label: {label}")
-# visualize_pcd(points)
