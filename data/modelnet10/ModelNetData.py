@@ -20,11 +20,16 @@ def normalize_points(pts: np.ndarray):
 
 
 class ModelNet10Loader(Dataset):
-    def __init__(self, root: str = 'data', split: str = 'train', n_points: int = 1024):
+    def __init__(self, root: str = None, split: str = 'train', n_points: int = 1024):
         # Download dataset for point cloud classification
-        DATA_DIR = Path(__file__).resolve().parent / 'data'
+        if root is None:
+            DATA_DIR = Path(__file__).resolve().parent
+        else:
+            DATA_DIR = root
+
         if not DATA_DIR.exists():
             DATA_DIR.mkdir(parents=True, exist_ok=True)
+
         model_folder = DATA_DIR / 'ModelNet10'
         if not model_folder.exists():
             www = 'http://3dvision.princeton.edu/projects/2014/3DShapeNets/ModelNet10.zip'
