@@ -88,6 +88,7 @@ device = 'cuda'
 
 config_keys = [k for k,v in globals().items() if not k.startswith('_') and isinstance(v, (int, float, bool, str))]
 config = {k: globals()[k] for k in config_keys}  # will be useful for logging
+print(config)
 
 
 # all models will be save in out file
