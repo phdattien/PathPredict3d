@@ -1,4 +1,5 @@
 import torch.utils.data as data
+import torch
 import numpy as np
 import pickle
 from pathlib import Path
@@ -47,7 +48,7 @@ class ModelNet40(data.Dataset):
                         mesh = trimesh.load(str(f_pts))
                         points, faces = mesh.sample(n_points, return_index=True)
                         points = np.asarray(points, dtype=np.float32)
-                        normals = mesh.face_normals[faces]
+                        normals = np.asarray(mesh.face_normals[faces], dtype=np.float32)
                         res = np.concatenate((points, normals), axis=1)
                         self.points_ls.append(res)
                         self.labels_ls.append(i)
@@ -92,7 +93,7 @@ if __name__ == "__main__":
             utils.PointcloudJitter(),
         ]
     )
-    dset = ModelNet40(1024, split='train', transforms=transforms)
+    dset = ModelNet40(1024, split='test')
     print(dset[0][0])
     print(dset[0][1])
 

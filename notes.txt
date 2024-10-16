@@ -1,0 +1,12 @@
+pointNet_1024_model_net10.pt:
+    - Total parameters: 3466259
+    - epoch 47: train loss 0.038917, train acc 0.986895, val loss 0.241257, val acc 0.927802 time 14060.57ms
+    - trained on ModelNet10 with 1024 points 
+    - logs: https://wandb.ai/ph-dattien-czech-technical-university-in-prague/pointcls/runs/pointnet3/overview
+
+
+pointnet_augment:
+    - Total parameters: 3466259
+    - epoch 97: train loss 0.098031, train acc 0.965978, val loss 0.275286, val acc 0.912715 time 17209.20ms
+    - same as before, but jitter and rotate each point cloud
+    - logs: https://wandb.ai/ph-dattien-czech-technical-university-in-prague/pointcls/runs/0pn4k9ru/workspace?nw=nwuserphdattien

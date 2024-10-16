@@ -1,20 +1,21 @@
 # inspiration from nanoGPT and https://github.com/yanx27/Pointnet_Pointnet2_pytorch/blob/master/train_classification.py
 import torch
 
+from tqdm import tqdm
 import wandb
 import time
-from models.pointnet import Pointnet
 # import open3d as o3d
 from datetime import datetime
 import torch.nn.functional as F
-from torchvision import transforms
 
 from models.pointnet2_cls_ssg import PointNet2ClassificationSSG
+# from models.pointnet2_cls_depricated import PointNet2ClassificationSSG
 
 from data_utils.ModelNet40Loader import ModelNet40
 from pathlib import Path
 import argparse
 from data_utils import utils
+from torchvision import transforms
 
 
 def parse_args():
@@ -49,9 +50,10 @@ def estimate_loss(model: torch.nn.Module, dataLoader, device):
     accs = torch.zeros(size)
 
     for i, (points, labels) in enumerate(dataLoader):
+        points = points.to(torch.float32)
         points = points.to(device)
         labels = labels.to(device)
-        logits, tranforms = model(points)
+        logits = model(points)
 
         losses[i] = F.cross_entropy(logits, labels).item()
         accs[i] = calculate_acc(logits, labels).item()
@@ -105,6 +107,9 @@ def main(args):
     trainDataLoader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, drop_last=True)
     valDataLoader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
 
+    tr_points, tr_labels = next(iter(trainDataLoader))
+    val_points, val_labels = next(iter(valDataLoader))
+
     '''MODEL LOADING'''
     model = PointNet2ClassificationSSG(args)
 
@@ -141,56 +146,42 @@ def main(args):
             weight_decay=args.decay_rate)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.7)
 
-    global_step = 0
-    best_val_acc = 0.0
-
     # training loop
     print('Start training...')
-    # model = torch.compile(model)
-
-    data_iter = iter(trainDataLoader)
-    points, labels = next(data_iter)
-
-    running_loss = 0.0
-    running_acc = 0.0
     for epoch in range(start_epoch, args.epoch):
         t0 = time.time()
+        running_loss = 0.0
+        running_acc = 0.0
+
         model.train()
+        for j, (points, labels) in tqdm(enumerate(trainDataLoader, 0), total=len(trainDataLoader), smoothing=0.9):
+            optimizer.zero_grad()
 
-        # for j, (points, labels) in enumerate(trainDataLoader):
-        # debug
-        optimizer.zero_grad()
+            points = points.to(device)
+            labels = labels.to(device)
 
-        points = points.to(device)
-        labels = labels.to(device)
+            logits = model(points)
+            loss = get_loss(logits, labels)
 
-        logits = model(points)
-        loss = get_loss(logits, labels)
+            running_loss += loss.item()
+            running_acc += calculate_acc(logits, labels).item()
 
-        running_loss += loss.item()
-        acc = calculate_acc(logits, labels).item() # debug
-        running_acc += calculate_acc(logits, labels).item()
-
-        loss.backward()
-        optimizer.step()
-
-        global_step += 1
-        # debug
+            loss.backward()
+            optimizer.step()
 
         scheduler.step()
 
         # evaluate | logging | saving check points
         train_loss = running_loss / len(trainDataLoader)
         train_acc = running_acc / len(trainDataLoader)
-        # val_loss, val_acc = estimate_loss(model, valDataLoader, device) # debug
+        val_loss, val_acc = estimate_loss(model, valDataLoader, device)
 
         torch.cuda.synchronize()
         t1 = time.time()
         dt = t1 - t0
         t0 = t1
 
-        print(f"epoch {epoch}: train loss {loss:.4f}, train acc {acc:.4f}, time {dt*1000:.2f}ms") # debug
-        # print(f"epoch {epoch}: train loss {train_loss:4f}, train acc {train_acc:4f}, val loss {val_loss:4f}, val acc {val_acc:4f} time {dt*1000:.2f}ms")
+        print(f"epoch {epoch}: train loss {train_loss:4f}, train acc {train_acc:4f}, val loss {val_loss:4f}, val acc {val_acc:4f} time {dt*1000:.2f}ms")
         # wandb.log({
         #     "train/loss": train_loss,
         #     "train/acc": train_acc,

@@ -95,6 +95,8 @@ class Pointnet(nn.Module):
         self.lm_head = nn.Linear(256, config.n_category)
 
     def forward(self, x):
+        x = x[:, :, :3]
+        print(x.shape)
         tranform3x3 = self.tnet1(x)
         x = torch.bmm(x, tranform3x3).transpose(2, 1)
         x = self.shared_mlp1(x)
