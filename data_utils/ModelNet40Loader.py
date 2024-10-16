@@ -1,12 +1,9 @@
-import torch
 import torch.utils.data as data
-import os
 import numpy as np
 import pickle
 from pathlib import Path
 import trimesh
 from tqdm import tqdm
-
 
 DATA_DIR = Path(__file__).parent.parent / 'data'
 
@@ -82,6 +79,7 @@ class ModelNet40(data.Dataset):
 
 
 if __name__ == "__main__":
+    import torch
     from torchvision import transforms
     import utils
 

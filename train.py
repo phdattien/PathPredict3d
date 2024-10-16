@@ -1,44 +1,46 @@
 # inspiration from nanoGPT and https://github.com/yanx27/Pointnet_Pointnet2_pytorch/blob/master/train_classification.py
 import torch
-import sys
 
-import provider
+import wandb
 import time
 # import open3d as o3d
+from datetime import datetime
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
+from torchvision import transforms
 
-from models.pointnet import Pointnet, PointNetConfig
-from data.modelnet10.ModelNetData import ModelNet10Loader
+from models.pointnet2_cls_ssg import PointNet2ClassificationSSG
 
+from .data_utils.ModelNet40Loader import ModelNet40
 from pathlib import Path
+import argparse
+from data_utils import utils
 
 
-def get_lr(it: int):
-    """it: epoch iteration"""
-    global LR
-    if it == 0:
-        return LR
-    scale = 0.5 ** (it // 20)
-    return LR * scale
+def parse_args():
+    '''PARAMETERS'''
+    parser = argparse.ArgumentParser('training')
+    parser.add_argument('--batch_size', type=int, default=32, help='batch size in training')
+    parser.add_argument('--num_category', default=40, help='training on ModelNet/40')
+    parser.add_argument('--epoch', default=200, type=int, help='number of epoch in training')
+    parser.add_argument('--learning_rate', default=0.001, type=float, help='learning rate in training')
+    parser.add_argument('--num_point', type=int, default=1024, help='Point Number')
+    parser.add_argument('--optimizer', type=str, default='Adam', help='optimizer for training')
+    parser.add_argument('--wb', action='store_true', default=True, help='use weight and biases')
+    parser.add_argument('--decay_rate', type=float, default=1e-4, help='decay rate')
+    parser.add_argument('--use_normals', action='store_true', default=True, help='use normals')
+    parser.add_argument('--wandb_project', type=str, default="pointcls", help='Name of wb project')
+    parser.add_argument('--debug', action='store_true', default=False, help='Debugging')
+    return parser.parse_args()
 
 
 def get_loss(logits: torch.tensor,
-             labels: torch.tensor,
-             tranforms: torch.tensor,
-             reg_rate: int):
-    # add orthogonal regulization
-
+             labels: torch.tensor):
     loss = F.cross_entropy(logits, labels)
-    IDEN = torch.eye(64)[None, :, :]
-    IDEN = IDEN.to(device)
-    reg = torch.linalg.norm(IDEN - torch.bmm(tranforms, tranforms.transpose(2, 1)), dim=(1, 2))
-    reg = torch.mean(reg)
-    return loss + reg * reg_rate
+    return loss
 
 
 @torch.no_grad()
-def estimate_loss(model: torch.nn.Module, dataLoader):
+def estimate_loss(model: torch.nn.Module, dataLoader, device):
     """Function estimate loss on data"""
     model.eval()
     size = len(dataLoader)
@@ -63,52 +65,51 @@ def calculate_acc(logits: torch.tensor, labels: torch.tensor):
     return correct / len(labels)
 
 
-BATCH_SIZE = 32
-DECAY_RATE = 1e-4
-REG_LOSS_RATE = 0.001
-LR = 0.001
-NUM_POINTS = 1024  # how many point in
-MODEL = 'pointnet'
-DATA = 'ModelNet10'  # which dataset using
-NUM_CATEGORY = 10
-DROPOUT = 0.3
-
-MODEL_NAME = 'pointnet_augment'  # name the model, will be placed in out dir
-RESUME = False  # keep training same model
-
-# wandb logging
-wandb_log = True  # wheter we want keep logging
-wandb_project = 'pointcls'
-wandb_run_name = 'pointNet_augment'
-wandb_resume = 'allow'  # in case we fail a run find ID of the run and resume
-# wandb_id = 'pointnet3'
-
-# training config
-device = 'cuda'
-
-config_keys = [k for k,v in globals().items() if not k.startswith('_') and isinstance(v, (int, float, bool, str))]
-config = {k: globals()[k] for k in config_keys}  # will be useful for logging
-print(config)
+def get_transforms():
+    train_transforms = transforms.Compose(
+        [
+            utils.PointcloudToTensor(),
+            utils.PointcloudScale(),
+            utils.PointcloudRotate(),
+            utils.PointcloudRotatePerturbation(),
+            utils.PointcloudTranslate(),
+            utils.PointcloudJitter(),
+            utils.PointcloudRandomInputDropout(),
+        ]
+    )
+    return train_transforms
 
 
-# all models will be save in out file
-OUT_DIR = Path(__file__).resolve().parent / 'out'
-if not OUT_DIR.exists():
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
+def main(args):
+    torch.manual_seed(13337)
+    out_dir = Path(__file__).resolve().parent / 'out'
+    if not out_dir.exists():
+        out_dir.mkdir(parents=True, exist_ok=True)
 
-ITER_NUM = 0
-BEST_VAL_ACC = 0.0
-MAX_ITER = 200
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# =====================MODEL CREATION / RESUMING TRAINING ====================
-# model creation (nanoGPT inspo)
-model_args = dict(n_category=NUM_CATEGORY, dropout=DROPOUT)
-conf = PointNetConfig(**model_args)
-model = Pointnet(conf)
+    # wandb logging
+    wandb_run_name = 'pointnet2' + datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+    # wandb_id = 'pointnet3'
+    wandb.init(project=args.wandb_project, name=wandb_run_name,
+               config=args, mode=('online' if not args.debug else 'disabled'),
+               save_code=True)
 
-if RESUME:
+    '''DATA LOADING'''
+    transforms = get_transforms()
+    train_dataset = ModelNet40(split='train', transforms=transforms)
+    test_dataset = ModelNet40(split='test', transforms=None)
+
+    trainDataLoader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, drop_last=True)
+    valDataLoader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
+
+    '''MODEL LOADING'''
+    model = PointNet2ClassificationSSG(args)
+    param_count = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Total parameters: {param_count}")
+
     try:
-        model_path = OUT_DIR / f"{MODEL_NAME}.pt"
+        model_path = out_dir / "poitnet2_ckpt.pt"
         print(f"Resume training from model {model_path}")
         ckpt = torch.load(str(model_path), map_location=device)
         state_dict = ckpt['model']
@@ -117,115 +118,90 @@ if RESUME:
             if k.startswith(unwanted_prefix):
                 state_dict[k[len(unwanted_prefix):]] = state_dict.pop(k)
         model.load_state_dict(state_dict)
-        ITER_NUM = ckpt['iter_num']
-        BEST_VAL_ACC = ckpt['best_val_acc']
+        start_epoch = ckpt['epoch']
+        best_val_acc = ckpt['best_val_acc']
         print("Succes of resuming model")
 
-    except Exception as e:
-        print(f"Model does not exist or wrong model arguments {e}")
-        sys.exit(1)
-model.to(device)
+    except:  # noqa
+        print("Training from scratch")
+        start_epoch = 0
+        best_val_acc = 0.0
 
-param_count = sum(p.numel() for p in model.parameters() if p.requires_grad)
-print(f"Total parameters: {param_count}")
+    model.to(device)
 
+    # optimizer
+    optimizer = torch.optim.Adam(
+            model.parameters(),
+            lr=args.learning_rate,
+            betas=(0.9, 0.999),
+            eps=1e-08,
+            weight_decay=args.decay_rate)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.7)
 
-# ================== LOGGING wandb =================================
-if wandb_log:
-    import wandb
-    # TODO: add config to be able to know what we used
-    wandb.init(project=wandb_project, name=wandb_run_name,
-               resume=wandb_resume, config=config)
+    global_step = 0
+    best_val_acc = 0.0
 
+    '''TRANING'''
+    print('Start training...')
+    model = torch.compile(model)
 
-# ==================== DATA LOADING ==============================
-torch.manual_seed(13337)
-train_dataset = ModelNet10Loader(split='train')
-val_dataset = ModelNet10Loader(split='test')
-trainDataLoader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, drop_last=True)
+    for epoch in range(start_epoch, args.epoch):
+        running_loss = 0.0
+        running_acc = 0.0
+        t0 = time.time()
+        model.train()
 
-valDataLoader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
+        scheduler.step()
+        for j, (points, labels) in enumerate(trainDataLoader):
+            optimizer.zero_grad()
 
+            points = points.to(device)
+            labels = labels.to(device)
 
-# ===================== OPTIMIZOR =====================================
+            logits = model(points)
+            loss = get_loss(logits, labels)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=LR, weight_decay=DECAY_RATE)
-if RESUME:
-    optimizer.load_state_dict(ckpt['optimizer'])
+            running_loss += loss.item()
+            running_acc += calculate_acc(logits, labels).item()
 
+            loss.backward()
+            optimizer.step()
 
-# ============================TRAINING LOOP====================================
-if RESUME:
-    print(f"Start training from epoch: {ITER_NUM} with best acc: {BEST_VAL_ACC}")
-else:
-    print("Start training from scratch")
+            global_step += 1
+        # evaluate | logging | saving check points
+        train_loss = running_loss / len(trainDataLoader)
+        train_acc = running_acc / len(trainDataLoader)
+        val_loss, val_acc = estimate_loss(model, valDataLoader, device)
 
-model = torch.compile(model)
-model.train()
-while True:
-    lr = get_lr(ITER_NUM)
-    # set the learning rate
-    for param_group in optimizer.param_groups:
-        param_group['lr'] = lr
+        torch.cuda.synchronize()
+        t1 = time.time()
+        dt = t1 - t0
+        t0 = t1
 
-    running_loss = 0.0
-    running_acc = 0.0
-    t0 = time.time()
-
-    for j, (points, labels) in enumerate(trainDataLoader):
-        optimizer.zero_grad()
-
-        points = points.data.numpy()
-        points = provider.rotate_point_cloud(points)
-        points = provider.jitter_point_cloud(points)
-        points = torch.Tensor(points)
-
-        points = points.to(device)
-        labels = labels.to(device)
-
-        logits, tranforms = model(points)
-        loss = get_loss(logits, labels, tranforms, REG_LOSS_RATE)
-
-        running_loss += loss.item()
-        running_acc += calculate_acc(logits, labels).item()
-
-        loss.backward()
-        optimizer.step()
-
-    # evaluate | logging | saving check points
-    train_loss = running_loss / len(trainDataLoader)
-    train_acc = running_acc / len(trainDataLoader)
-    val_loss, val_acc = estimate_loss(model, valDataLoader)
-
-    torch.cuda.synchronize()
-    t1 = time.time()
-    dt = t1 - t0
-    t0 = t1
-
-    print(f"epoch {ITER_NUM}: train loss {train_loss:4f}, train acc {train_acc:4f}, val loss {val_loss:4f}, val acc {val_acc:4f} time {dt*1000:.2f}ms")
-
-    ITER_NUM += 1
-    if wandb_log:
+        print(f"epoch {epoch}: train loss {train_loss:4f}, train acc {train_acc:4f}, val loss {val_loss:4f}, val acc {val_acc:4f} time {dt*1000:.2f}ms")
         wandb.log({
             "train/loss": train_loss,
             "train/acc": train_acc,
             "val/loss": val_loss,
             "val/acc": val_acc,
-            "lr": lr
+            "lr": scheduler.get_last_lr()
             })
 
-    if val_acc > BEST_VAL_ACC:
-        BEST_VAL_ACC = val_acc
-        state = {
-                'model': model.state_dict(),
-                'optimizer': optimizer.state_dict(),
-                'config': config,
-                'model_args': model_args,
-                'iter_num': ITER_NUM,
-                'best_val_acc': BEST_VAL_ACC
-                }
-        print(f"Saving, checkpoint with acc {BEST_VAL_ACC:4f} to {str(OUT_DIR)}")
-        torch.save(state, str(OUT_DIR / f"{MODEL_NAME}.pt"))
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            state = {
+                    'model': model.state_dict(),
+                    'optimizer': optimizer.state_dict(),
+                    'model_args': args,
+                    'epoch': epoch+1,
+                    'best_val_acc': best_val_acc
+                    }
+            print(f"Saving, checkpoint with acc {best_val_acc:4f} to {str(out_dir)}")
+            torch.save(state, str(out_dir / "poitnet2_ckpt.pt"))
 
-    if ITER_NUM > MAX_ITER:
-        break
+    print('End of training...')
+
+
+if __name__ == '__main__':
+    args = parse_args()
+    main(args)
