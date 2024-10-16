@@ -1,9 +1,5 @@
-import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from pointnet2_ops.pointnet2_modules import PointnetSAModule
-from torchvision import transforms
-from ..data_utils import utils
 
 
 class PointNet2ClassificationSSG(nn.Module):
@@ -69,41 +65,5 @@ class PointNet2ClassificationSSG(nn.Module):
         for module in self.SA_modules:
             xyz, features = module(xyz, features)
 
-        return self.fc_layer(features.squeeze(-1))
-
-    def training_step(self, batch, batch_idx):
-        pc, labels = batch
-
-        logits = self.forward(pc)
-        loss = F.cross_entropy(logits, labels)
-        with torch.no_grad():
-            acc = (torch.argmax(logits, dim=1) == labels).float().mean()
-
-        log = dict(train_loss=loss, train_acc=acc)
-
-        return dict(loss=loss, log=log, progress_bar=dict(train_acc=acc))
-
-    def validation_step(self, batch, batch_idx):
-        pc, labels = batch
-
-        logits = self.forward(pc)
-        loss = F.cross_entropy(logits, labels)
-        acc = (torch.argmax(logits, dim=1) == labels).float().mean()
-
-        return dict(val_loss=loss, val_acc=acc)
-
-    def validation_end(self, outputs):
-        reduced_outputs = {}
-        for k in outputs[0]:
-            for o in outputs:
-                reduced_outputs[k] = reduced_outputs.get(k, []) + [o[k]]
-
-        for k in reduced_outputs:
-            reduced_outputs[k] = torch.stack(reduced_outputs[k]).mean()
-
-        reduced_outputs.update(
-            dict(log=reduced_outputs.copy(), progress_bar=reduced_outputs.copy())
-        )
-
-        return reduced_outputs
-
+        logits = self.fc_layer(features.squeeze(-1))
+        return logits

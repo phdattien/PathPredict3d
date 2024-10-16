@@ -3,6 +3,7 @@ import torch
 
 import wandb
 import time
+from models.pointnet import Pointnet
 # import open3d as o3d
 from datetime import datetime
 import torch.nn.functional as F
@@ -10,7 +11,7 @@ from torchvision import transforms
 
 from models.pointnet2_cls_ssg import PointNet2ClassificationSSG
 
-from .data_utils.ModelNet40Loader import ModelNet40
+from data_utils.ModelNet40Loader import ModelNet40
 from pathlib import Path
 import argparse
 from data_utils import utils
@@ -19,7 +20,7 @@ from data_utils import utils
 def parse_args():
     '''PARAMETERS'''
     parser = argparse.ArgumentParser('training')
-    parser.add_argument('--batch_size', type=int, default=32, help='batch size in training')
+    parser.add_argument('--batch_size', type=int, default=24, help='batch size in training')
     parser.add_argument('--num_category', default=40, help='training on ModelNet/40')
     parser.add_argument('--epoch', default=200, type=int, help='number of epoch in training')
     parser.add_argument('--learning_rate', default=0.001, type=float, help='learning rate in training')
@@ -97,6 +98,7 @@ def main(args):
 
     '''DATA LOADING'''
     transforms = get_transforms()
+    # transforms = None
     train_dataset = ModelNet40(split='train', transforms=transforms)
     test_dataset = ModelNet40(split='test', transforms=None)
 
@@ -105,6 +107,7 @@ def main(args):
 
     '''MODEL LOADING'''
     model = PointNet2ClassificationSSG(args)
+
     param_count = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Total parameters: {param_count}")
 
@@ -141,63 +144,72 @@ def main(args):
     global_step = 0
     best_val_acc = 0.0
 
-    '''TRANING'''
+    # training loop
     print('Start training...')
-    model = torch.compile(model)
+    # model = torch.compile(model)
 
+    data_iter = iter(trainDataLoader)
+    points, labels = next(data_iter)
+
+    running_loss = 0.0
+    running_acc = 0.0
     for epoch in range(start_epoch, args.epoch):
-        running_loss = 0.0
-        running_acc = 0.0
         t0 = time.time()
         model.train()
 
+        # for j, (points, labels) in enumerate(trainDataLoader):
+        # debug
+        optimizer.zero_grad()
+
+        points = points.to(device)
+        labels = labels.to(device)
+
+        logits = model(points)
+        loss = get_loss(logits, labels)
+
+        running_loss += loss.item()
+        acc = calculate_acc(logits, labels).item() # debug
+        running_acc += calculate_acc(logits, labels).item()
+
+        loss.backward()
+        optimizer.step()
+
+        global_step += 1
+        # debug
+
         scheduler.step()
-        for j, (points, labels) in enumerate(trainDataLoader):
-            optimizer.zero_grad()
 
-            points = points.to(device)
-            labels = labels.to(device)
-
-            logits = model(points)
-            loss = get_loss(logits, labels)
-
-            running_loss += loss.item()
-            running_acc += calculate_acc(logits, labels).item()
-
-            loss.backward()
-            optimizer.step()
-
-            global_step += 1
         # evaluate | logging | saving check points
         train_loss = running_loss / len(trainDataLoader)
         train_acc = running_acc / len(trainDataLoader)
-        val_loss, val_acc = estimate_loss(model, valDataLoader, device)
+        # val_loss, val_acc = estimate_loss(model, valDataLoader, device) # debug
 
         torch.cuda.synchronize()
         t1 = time.time()
         dt = t1 - t0
         t0 = t1
 
-        print(f"epoch {epoch}: train loss {train_loss:4f}, train acc {train_acc:4f}, val loss {val_loss:4f}, val acc {val_acc:4f} time {dt*1000:.2f}ms")
-        wandb.log({
-            "train/loss": train_loss,
-            "train/acc": train_acc,
-            "val/loss": val_loss,
-            "val/acc": val_acc,
-            "lr": scheduler.get_last_lr()
-            })
+        print(f"epoch {epoch}: train loss {loss:.4f}, train acc {acc:.4f}, time {dt*1000:.2f}ms") # debug
+        # print(f"epoch {epoch}: train loss {train_loss:4f}, train acc {train_acc:4f}, val loss {val_loss:4f}, val acc {val_acc:4f} time {dt*1000:.2f}ms")
+        # wandb.log({
+        #     "train/loss": train_loss,
+        #     "train/acc": train_acc,
+        #     "val/loss": val_loss,
+        #     "val/acc": val_acc,
+        #     "lr": scheduler.get_last_lr()
+        #     })
 
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            state = {
-                    'model': model.state_dict(),
-                    'optimizer': optimizer.state_dict(),
-                    'model_args': args,
-                    'epoch': epoch+1,
-                    'best_val_acc': best_val_acc
-                    }
-            print(f"Saving, checkpoint with acc {best_val_acc:4f} to {str(out_dir)}")
-            torch.save(state, str(out_dir / "poitnet2_ckpt.pt"))
+        # if val_acc > best_val_acc:
+        #     best_val_acc = val_acc
+        #     state = {
+        #             'model': model.state_dict(),
+        #             'optimizer': optimizer.state_dict(),
+        #             'model_args': args,
+        #             'epoch': epoch+1,
+        #             'best_val_acc': best_val_acc
+        #             }
+        #     print(f"Saving, checkpoint with acc {best_val_acc:4f} to {str(out_dir)}")
+        #     torch.save(state, str(out_dir / "poitnet2_ckpt.pt"))
 
     print('End of training...')
 
