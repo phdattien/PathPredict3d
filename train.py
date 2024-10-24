@@ -67,17 +67,27 @@ def calculate_acc(logits: torch.tensor, labels: torch.tensor):
     correct = pred.eq(labels.view_as(pred)).sum()
     return correct / len(labels)
 
+            # utils.PointcloudToTensor(),
+            # utils.PointcloudScale(),
+            # utils.PointcloudRotate(),
+            # utils.PointcloudRotatePerturbation(),
+            # utils.PointcloudTranslate(),
+            # utils.PointcloudJitter(),
+            # utils.PointcloudRandomInputDropout(),
+
+
+            # utils.PointcloudToTensor(),
+            # utils.PointcloudRandomInputDropout(),
+            # utils.PointcloudScale(),
+            # utils.PointcloudTranslate(),
 
 def get_transforms():
     train_transforms = transforms.Compose(
         [
             utils.PointcloudToTensor(),
-            utils.PointcloudScale(),
-            utils.PointcloudRotate(),
-            utils.PointcloudRotatePerturbation(),
-            utils.PointcloudTranslate(),
-            utils.PointcloudJitter(),
             utils.PointcloudRandomInputDropout(),
+            utils.PointcloudScale(),
+            utils.PointcloudTranslate(),
         ]
     )
     return train_transforms
@@ -103,18 +113,24 @@ def main(args):
     # transforms = None
     train_dataset = ModelNet40(split='train', transforms=transforms)
     test_dataset = ModelNet40(split='test', transforms=None)
+    # TODO: split train set to val / tr
 
     trainDataLoader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, drop_last=True)
     valDataLoader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
-
-    tr_points, tr_labels = next(iter(trainDataLoader))
-    val_points, val_labels = next(iter(valDataLoader))
 
     '''MODEL LOADING'''
     model = PointNet2ClassificationSSG(args)
 
     param_count = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Total parameters: {param_count}")
+
+    # optimizer
+    optimizer = torch.optim.Adam(
+            model.parameters(),
+            lr=args.learning_rate,
+            betas=(0.9, 0.999),
+            eps=1e-08,
+            weight_decay=args.decay_rate)
 
     try:
         model_path = out_dir / "poitnet2_ckpt.pt"
@@ -136,14 +152,6 @@ def main(args):
         best_val_acc = 0.0
 
     model.to(device)
-
-    # optimizer
-    optimizer = torch.optim.Adam(
-            model.parameters(),
-            lr=args.learning_rate,
-            betas=(0.9, 0.999),
-            eps=1e-08,
-            weight_decay=args.decay_rate)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.7)
 
     # training loop
@@ -154,7 +162,7 @@ def main(args):
         running_acc = 0.0
 
         model.train()
-        for j, (points, labels) in tqdm(enumerate(trainDataLoader, 0), total=len(trainDataLoader), smoothing=0.9):
+        for j, (points, labels) in tqdm(enumerate(trainDataLoader), total=len(trainDataLoader), smoothing=0.9):
             optimizer.zero_grad()
 
             points = points.to(device)
@@ -168,6 +176,7 @@ def main(args):
 
             loss.backward()
             optimizer.step()
+            break
 
         scheduler.step()
 
@@ -182,25 +191,26 @@ def main(args):
         t0 = t1
 
         print(f"epoch {epoch}: train loss {train_loss:4f}, train acc {train_acc:4f}, val loss {val_loss:4f}, val acc {val_acc:4f} time {dt*1000:.2f}ms")
-        # wandb.log({
-        #     "train/loss": train_loss,
-        #     "train/acc": train_acc,
-        #     "val/loss": val_loss,
-        #     "val/acc": val_acc,
-        #     "lr": scheduler.get_last_lr()
-        #     })
+        wandb.log({
+            "train/loss": train_loss,
+            "train/acc": train_acc,
+            "val/loss": val_loss,
+            "val/acc": val_acc,
+            "lr": scheduler.get_last_lr()[0],
+            "epoch runtime": dt
+            })
 
-        # if val_acc > best_val_acc:
-        #     best_val_acc = val_acc
-        #     state = {
-        #             'model': model.state_dict(),
-        #             'optimizer': optimizer.state_dict(),
-        #             'model_args': args,
-        #             'epoch': epoch+1,
-        #             'best_val_acc': best_val_acc
-        #             }
-        #     print(f"Saving, checkpoint with acc {best_val_acc:4f} to {str(out_dir)}")
-        #     torch.save(state, str(out_dir / "poitnet2_ckpt.pt"))
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            state = {
+                    'model': model.state_dict(),
+                    'optimizer': optimizer.state_dict(),
+                    'model_args': args,
+                    'epoch': epoch+1,
+                    'best_val_acc': best_val_acc
+                    }
+            print(f"Saving, checkpoint with acc {best_val_acc:4f} to {str(out_dir)}")
+            torch.save(state, str(out_dir / "poitnet2_ckpt.pt"))
 
     print('End of training...')
 

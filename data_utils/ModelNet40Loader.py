@@ -35,7 +35,6 @@ class ModelNet40(data.Dataset):
         else:
             self._resampled_folder = DATA_DIR / f'modelnet40_resampled_{n_points}'
 
-        # TODO uncomment
         if not self._resampled_folder.exists():
             self._resampled_folder.mkdir(parents=True, exist_ok=True)
             # create dataset
