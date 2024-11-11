@@ -3,10 +3,8 @@ from pointnet2_ops.pointnet2_modules import PointnetSAModule
 
 
 class PointNet2ClassificationSSG(nn.Module):
-    def __init__(self, opt):
+    def __init__(self, num_category:int):
         super().__init__()
-
-        self.opt = opt
 
         self.SA_modules = nn.ModuleList()
         self.SA_modules.append(
@@ -39,7 +37,7 @@ class PointNet2ClassificationSSG(nn.Module):
             nn.BatchNorm1d(256),
             nn.ReLU(True),
             nn.Dropout(0.5),
-            nn.Linear(256, opt.num_category),
+            nn.Linear(256, num_category),
         )
 
     def _break_up_pc(self, pc):

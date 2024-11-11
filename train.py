@@ -119,7 +119,7 @@ def main(args):
     valDataLoader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
 
     '''MODEL LOADING'''
-    model = PointNet2ClassificationSSG(args)
+    model = PointNet2ClassificationSSG(args.num_category)
 
     param_count = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Total parameters: {param_count}")
@@ -176,7 +176,6 @@ def main(args):
 
             loss.backward()
             optimizer.step()
-            break
 
         scheduler.step()
 
