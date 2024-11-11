@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <title>PaintNet: Unstructured Multi-Path Learning from 3D Point Clouds for Robotic Spray Painting</title>
+    <link rel="shortcut icon" href="assets/img/favicon_package/favicon.ico" type="image/x-icon" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" type="text/css" href="assets/css/style.css"  />
+    <link rel="stylesheet" type="text/css" href="assets/css/animatedBackground.css"  />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;700&display=swap" rel="stylesheet">
+
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/img/favicon_package/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/img/favicon_package/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/img/favicon_package/favicon-16x16.png">
+    <link rel="manifest" href="assets/site.webmanifest">
+    <link rel="mask-icon" href="assets/safari-pinned-tab.svg" color="#5bbad5">
+    <meta name="msapplication-TileColor" content="#da532c">
+    <meta name="theme-color" content="#ffffff">
+  </head>
+  <body>
+        <div id="citePopup">
+      <div id="citePopupContent">
+        <p>If you use our code or dataset, please consider citing:</p>
+          <div class="bibtexContainer">
+<pre>
+@misc{tiboni2022paintnet,
+  title = {PaintNet: Unstructured Multi-Path Learning from 3D Point Clouds for Robotic Spray Painting},
+  author = {Tiboni, Gabriele and Camoriano, Raffaello and Tommasi, Tatiana},
+  doi = {10.48550/ARXIV.2211.06930},  
+  keywords = {Robotics (cs.RO), Computer Vision and Pattern Recognition (cs.CV), FOS: Computer and information sciences, FOS: Computer and information sciences},  
+  publisher = {arXiv},
+  year = {2022}
+}
+</pre>
+          </div>
+          <i id="closePopupIcon">&times;</i>
+      </div>
+    </div>
+
+    <header>
+      <div id="animContainer"></div>
+
+      <div id="headerBackground"></div>
+
+      <div id="elevatedContent">
+        <h1>PaintNet: Unstructured Multi-Path Learning from 3D Point Clouds for Robotic Spray Painting</h1>
+        <h3 style="font-style: normal;">G. Tiboni, R. Camoriano, T. Tommasi<br/>
+            2023 IEEE/RSJ international conference on intelligent robots and systems (IROS)</h3>
+
+        <div id="linksContainer">
+          <a href="https://arxiv.org/abs/2211.06930">Paper</a>
+          <a href="https://github.com/gabrieletiboni/paintnet" target="_blank" class="iconLink">Code <img src="assets/img/github_logo_light_64px.png"/></a>
+          <a href="#datasetTab">Dataset</a>
+          <!-- <a href="#resultsTab" class="comingSoon">Results</a> -->
+          <a class="linkLike openCitePopup">Cite</a>
+        </div>
+      </div>
+
+      <div id="videoContainer">
+        <div>
+          <video controls>
+            <source src="assets/video/IROS23_slides_video_OFFICIAL.mp4" type="video/mp4">
+            Your browser does not support the video tag.
+          </video>
+        </div>
+      </div>
+    </header>
+
+    <section id="main">
+      <div id="intro">
+        <p>
+          <strong><em>Abstract</em></strong><br/>
+          Popular industrial robotic problems such as spray painting and welding require (i) conditioning on free-shape 3D objects and (ii) planning of multiple trajectories to solve the task. Yet, existing solutions make strong assumptions on the form of input surfaces and the nature of output paths, resulting in limited approaches unable to cope with real-data variability. By leveraging on recent advances in 3D deep learning, we introduce a novel framework capable of dealing with arbitrary 3D surfaces, and handling a variable number of unordered output paths (i.e. unstructured). Our approach focuses on predicting smaller path segments, which can be later concatenated to reconstruct long-horizon paths. We extensively validate the proposed method in the context of robotic spray painting by releasing PaintNet, the first public dataset of expert demonstrations on free-shape 3D objects collected in a real industrial scenario. A thorough experimental analysis demonstrates the capabilities of our model to promptly predict smooth output paths that cover up to 95% of the surface of previously unseen object instances. Furthermore, we show how models learned from PaintNet capture relevant features which serve as a reliable starting point to improve data and time efficiency when dealing with new object categories.
+        </p>
+        <br/>
+        <p style="font-style: italic;">Authored by <a href="https://gabrieletiboni.com/" target="_blank" class="easyLink">Gabriele Tiboni</a>, <a href="https://scholar.google.com/citations?user=vBBJ2wkAAAAJ&hl=it" target="_blank" class="easyLink">Raffaello Camoriano</a>, and <a href="http://www.tatianatommasi.com/" target="_blank" class="easyLink">Tatiana Tammasi</a> from Politecnico di Torino. This work was supported by <a href="https://www.efort.com.cn/en/group/index/48.html" target="_blank" class="easyLink">EFORT group</a>, providing the authors with domain knowledge, original object meshes, trajectory data, and access to the proprietary spray painting simulator used during the experiments.
+        </p>
+      </div>
+
+      <div id="introImg">
+        <span>
+          <img src="assets/img/paintnet_overview_v2.png">
+        </span>
+        <span>
+          Overview of our method for multi-path prediction of 6D-pose spray painting paths given a raw 3D point cloud in input.
+        </span>
+      </div>
+
+      <div class="tab" id="datasetTab">
+        <h2>Dataset</h2>
+
+        <p>
+          We introduce the PaintNet dataset to accelerate research on supervised learning for multi-path prediction conditioned on free-shape 3D objects. PaintNet includes more than 800 object meshes and the associated spray painting strokes collected in a real industrial setting. The data currently covers four object categories of growing complexity: <em>cuboids</em>, <em>windows</em>, <em>shelves</em>, <em>containers</em>. All object meshes are already provided in a subdivided, smoothed watertight version to avoid sharp edges and holes. For each object, the associated unordered set of spray painting paths (a.k.a. strokes) is given, each being a sequence of end-effector poses. The 6-dimensional poses encode the 3D position of the ideal paint deposit point—12cm away from the gun nozzle—and the gun orientations as Euler angles. Each pose is collected by sampling from the end-effector kinematics at a rate of 4ms during offline program execution.
+        </p>
+
+        <p>
+          <strong>Download the PaintNet dataset at <a target="_blank" href="https://zenodo.org/records/10105273" class="easyLink">https://zenodo.org/records/10105273</a></strong>.
+        </p>
+
+        <p>You may proceed to unzip the desired categories at the link above into a local path <span class="inlineCode">path/to/dataset/</span>. Then, add the environment variable <span class="inlineCode">export PAINTNET_ROOT=path/to/dataset/</span>.</p>
+
+      </div>
+
+      <!-- <div class="tab" id="downloadTab">
+          <h2>Download</h2>
+          <p class="comingSoon">
+            Coming Soon
+          </p>
+      </div> -->
+
+      <!-- <div class="tab" id="resultsTab">
+          <h2>Results</h2>
+          <p class="comingSoon">
+            Coming Soon
+          </p>
+      </div> -->
+
+      <div class="tab">
+          <h2>Citing</h2>
+          <!-- <p class="comingSoon">
+            Coming Soon
+          </p> -->
+          <div class="bibtexContainer">
+<pre>
+@misc{tiboni2022paintnet,
+  title = {PaintNet: Unstructured Multi-Path Learning from 3D Point Clouds for Robotic Spray Painting},
+  author = {Tiboni, Gabriele and Camoriano, Raffaello and Tommasi, Tatiana},
+  doi = {10.48550/ARXIV.2211.06930},  
+  keywords = {Robotics (cs.RO), Computer Vision and Pattern Recognition (cs.CV), FOS: Computer and information sciences, FOS: Computer and information sciences},  
+  publisher = {arXiv},
+  year = {2022}
+}
+</pre>
+          </div>
+      </div>
+    </section>
+
+    <footer>
+      If you have any questions, please contact us at <a href="mailto:gabriele.tiboni@polito.it" class="easyLink">gabriele.tiboni@polito.it</a>
+    </footer>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+    <script type="text/javascript">
+      function init() {
+        loadAnimatedBackground();
+      }
+
+      $('a[href^="#"]').on('click', function(event) {
+
+          var target = $( $(this).attr('href') );
+
+          if( target.length ) {
+              event.preventDefault();
+              $('html, body').animate({
+                  // scrollTop: target.offset().top - 30
+                  scrollTop: target.offset().top+$('body').scrollTop()-10
+              }, 600);
+          }
+
+      });
+
+      $(document).on('click', '.openCitePopup', function() {
+        $(document.getElementById("citePopup")).fadeIn(200);
+      });
+
+      $(document).on('click', '#citePopup', function() {
+        if (!$(event.target).closest(document.getElementById("citePopupContent")).length) {
+          $(document.getElementById("citePopup")).fadeOut(200);
+        }
+      });
+
+      $(document.getElementById("closePopupIcon")).on('click', function() {
+          $(document.getElementById("citePopup")).fadeOut(200);
+      });
+
+      function loadAnimatedBackground() {
+        $("#animContainer").load("assets/include/animatedBackground.html"); 
+      }
+
+      init();
+    </script>
+  </body>
+</html>
