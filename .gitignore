@@ -1,1 +1,14 @@
 data/*
+
+
+*torch-nndistance/build/*
+
+*__pycache__
+
+.ipynb_checkpoints
+
+**debug_runs**
+
+
+paintnet/torch-nndistance/build
+**torch_nndistance.egg-info
