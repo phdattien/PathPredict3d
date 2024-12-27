@@ -11,7 +11,6 @@ trajectory, given object point-cloud in input
             - python train.py --config shelves_stable_v1.json --seed 42
             - python train.py --config containers_stable_v1.json --seed 42
 """
-import pdb
 import sys
 import argparse
 from pprint import pprint
@@ -104,7 +103,7 @@ def main():
     print('\n ===== RUN NAME:', run_name, f' ({save_dir}) ===== \n')
     pprint(vars(args))
 
-    dataset_path = get_dataset_path(args.dataset)
+    # dataset_path = get_dataset_path(args.dataset)
 
     wandb.init(config=config,
                name=run_name,
@@ -115,6 +114,7 @@ def main():
 
     wandb.config.path = save_dir
     wandb.config.hostname = socket.gethostname()
+    dataset_path = "../../thesis-trajplan3d/data/objects/cuboids-v1"
 
     tr_dataset = PaintNetDataloader(root=dataset_path,
                                     dataset=config['dataset'],
@@ -176,8 +176,8 @@ def main():
 
             point_cloud, traj, dirname = data
 
-            if args.overfitting and single_sample is None:
-                single_sample = dirname
+            # if args.overfitting and single_sample is None:
+            #     single_sample = dirname
                 # assert args.batch_size == 1, '--overfitting needs a batch_size=1'
 
             B, N, dim = point_cloud.size()
@@ -189,6 +189,8 @@ def main():
             #     visualize_mesh_traj(os.path.join(dataset_path, dirname[b], dirname[b]+'_norm.obj'), traj[b], lambda_points=config['lambda_points'], check_padding=True)
             # pdb.set_trace()
 
+            print(f"when training: {point_cloud.shape}")
+
             traj_pred = model(point_cloud)
 
             loss, loss_list = loss_handler.compute(traj_pred, traj)
@@ -198,6 +200,7 @@ def main():
 
             tot_loss += loss.item() * B
             tot_loss_list += loss_list * B
+            return
 
         sched.step()
 

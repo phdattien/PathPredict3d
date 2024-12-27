@@ -192,7 +192,6 @@ def chamfer_distance(
         x_nn = knn_points(x, y, lengths1=x_lengths, lengths2=y_lengths, K=2)
         y_nn = knn_points(y, x, lengths1=y_lengths, lengths2=x_lengths, K=2)
 
-
         if not soft_attraction:
             cham_x = torch.empty((N)).cuda()
             cham_y = torch.empty((N)).cuda()

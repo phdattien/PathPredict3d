@@ -49,6 +49,9 @@ def index_points(points, idx):
     Return:
         new_points:, indexed points data, [B, S, C]
     """
+    print(f"SHIBALLLLL {idx.shape}")
+    print(idx.max(), idx.min())
+    print(f"SHIBALLLLL {points.shape}")
     device = points.device
     B = points.shape[0]
     view_shape = list(idx.shape)

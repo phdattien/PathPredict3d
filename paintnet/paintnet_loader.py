@@ -139,12 +139,12 @@ class PaintNetDataloader(data.Dataset):
             point_cloud, traj, dirname = self.cache[index]
         else:  # Retrieve from filesystem
             mesh_file, traj_file, dirname = self.datapath[index]
-            
             point_cloud = read_mesh_as_pointcloud(mesh_file, self.pc_points)
             traj, stroke_ids = read_traj_file(traj_file, extra_data=self.extra_data, weight_orient=self.weight_orient)
 
             point_cloud, traj = center_pair(point_cloud, traj, mesh_file)  # Shift to zero mean
             if self.normalization == 'per-dataset':
+                print("hello")
                 point_cloud /= self.dataset_mean_max_distance
                 traj[:, :3] /= self.dataset_mean_max_distance
             elif self.normalization == 'per-mesh':
@@ -156,8 +156,8 @@ class PaintNetDataloader(data.Dataset):
             assert point_cloud.shape[0] >= self.pc_points
             choice = np.random.choice(point_cloud.shape[0], self.pc_points, replace=False)  # Sub-sample point-cloud randomly
             point_cloud = point_cloud[choice, :]
-            
-            choice = np.round_(np.linspace(0, (traj.shape[0]-1), num=self.traj_points)).astype(int)  # Sub-sample traj at equal intervals (up to rounding) for a total of <self.traj_points> points
+
+            choice = np.round(np.linspace(0, (traj.shape[0]-1), num=self.traj_points)).astype(int)  # Sub-sample traj at equal intervals (up to rounding) for a total of <self.traj_points> points
             traj = traj[choice, :]
             stroke_ids = stroke_ids[choice]
 
@@ -193,7 +193,6 @@ class PaintNetDataloader(data.Dataset):
                 one parameterization of choice (quaternions, rotation matrix, euler angles).
                 https://en.wikipedia.org/wiki/Rotation_formalisms_in_three_dimensions
                 """
-                
 
                 point_cloud, traj = point_cloud.copy(), traj.copy()  # Not sure if needed, but this way I don't apply changes to the cache
 
@@ -228,7 +227,6 @@ class PaintNetDataloader(data.Dataset):
                     if 'vel' in self.extra_data:
                         raise NotImplementedError('This part is now deprecated. Fix it with the correct indexes in case orient_in() is True etc.')
                         traj[:,3:6] = rot.apply(traj[:,3:6])
-        
 
         return point_cloud, traj, dirname
 

@@ -9,28 +9,13 @@ import zlib
 import random
 
 import matplotlib.pyplot as plt
-import seaborn as sns
-import numpy as np
+# import seaborn as sns
 import torch
 from scipy.spatial.transform import Rotation as Rot
-try:
-    import pyvista as pv  
-except ImportError:
-    print('Warning! Unable to import pyvista package. visualizations won\'t be available. Run `pip install pyvista`')
-    pass
-try:
-    import point_cloud_utils as pcu
-except ImportError:
-    print(f'Warning! Unable to import point_cloud_utils package.')
-    pass
-try:
-    import networkx as nx 
-except ImportError:
-    print(f'Warning! Unable to import networkx package.')
-    pass
 
+import numpy as np
+import pyvista as pv  
 import trimesh
-
 
 
 def normalize_pc(pc):
@@ -48,17 +33,15 @@ def normalize_pc(pc):
     pc = pc / m
     return pc
 
-def get_max_distance(meshpath):
+def get_max_distance(pc):
     """Returns max distance from mean of given mesh filename"""
-    v, f = pcu.load_mesh_vf(os.path.join(meshpath))
-    centroid = np.mean(v, axis=0)
-    v = v - centroid
+    centroid = np.mean(pc, axis=0)
+    v = pc - centroid
     m = np.max(np.sqrt(np.sum(v ** 2, axis=1)))
     return m
 
-def get_mean_mesh(meshpath):
-    v, f = pcu.load_mesh_vf(os.path.join(meshpath))
-    centroid = np.mean(v, axis=0)
+def get_mean_mesh(pc):
+    centroid = np.mean(pc, axis=0)
     return centroid
 
 def get_random_string(n=5):
@@ -66,7 +49,7 @@ def get_random_string(n=5):
 
 def center_pair(point_cloud, traj, meshpath):
     assert point_cloud.ndim == 2 and point_cloud.shape[-1] == 3
-    centroid = get_mean_mesh(meshpath) # np.mean(point_cloud, axis=0)
+    centroid = get_mean_mesh(point_cloud) # np.mean(point_cloud, axis=0)
     point_cloud -= centroid
     traj[:, :3] -= centroid
     return point_cloud, traj
@@ -444,12 +427,8 @@ def visualize_mesh_traj(meshfile,
 
     show_plot = True if plotter is None else False
 
-    if plotter is not None:
-        assert index is not None, 'index is None but plotter is not None'
-        plotter.subplot(*index)
-    else:
-        plotter = pv.Plotter(shape=(1, 1), window_size=(1920,1080))
-        plotter.subplot(0,0)
+    plotter = pv.Plotter(shape=(1, 1), window_size=(1920,1080))
+    plotter.subplot(0,0)
 
     mesh_obj = pv.read(meshfile)
     plotter.add_mesh(mesh_obj)
@@ -588,7 +567,7 @@ def visualize_sequence_traj(traj, **args):
 
     return
 
-def visualize_complete_traj(traj, stroke_ids, plotter=None, index=None, text=None, extra_data=[]):
+def visualize_complete_traj(traj, stroke_ids, plotter=None, index=None, text=None, extra_data=[], windows_size=(1920, 1080)):
     """Plot trajectory with strokes as different colours
     Input:
         traj: (N, 3) array with x-y-z
@@ -602,7 +581,7 @@ def visualize_complete_traj(traj, stroke_ids, plotter=None, index=None, text=Non
     if plotter is not None:
         plotter.subplot(*index)
     else:
-        plotter = pv.Plotter(shape=(1, 1), window_size=(1920,1080))
+        plotter = pv.Plotter(shape=(1, 1), window_size=windows_size)
         plotter.subplot(0,0)
 
     pc = pv.PolyData(traj[:, :3])

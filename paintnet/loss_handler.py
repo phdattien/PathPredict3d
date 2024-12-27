@@ -245,7 +245,7 @@ class LossHandler():
         outdim = get_dim_traj_points(self.config['extra_data'])
 
         starting_points = y_pred[:, :, :outdim]
-        ending_points = y_pred[:, :, -outdim:]      
+        ending_points = y_pred[:, :, -outdim:]
 
         inferred_vel_starting = y_pred[:, :, outdim:outdim+3] - y_pred[:, :, :3]
         inferred_vel_ending = y_pred[:, :, -outdim:-(outdim-3)] - y_pred[:, :, -(outdim*2):-(outdim*2-3)]
